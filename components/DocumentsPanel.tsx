@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Upload, FileText, Eye, Trash2, Loader2, Sparkles } from "lucide-react";
+import { Upload, FileText, Eye, Trash2, Loader2, Sparkles, Layers } from "lucide-react";
 
 type DocumentRow = {
   id: string;
@@ -52,6 +52,7 @@ export default function DocumentsPanel({
   const [discipline, setDiscipline] = useState("SIN_CLASIFICAR");
   const [error, setError] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [analyzingProject, setAnalyzingProject] = useState(false);
   const [analyzeMessage, setAnalyzeMessage] = useState<string | null>(null);
 
   async function loadDocuments() {
@@ -177,7 +178,6 @@ export default function DocumentsPanel({
           : `No se encontraron observaciones en "${doc.name}".`
       );
       setAnalyzingId(null);
-
       window.location.reload();
     } catch {
       setError("Error de conexión al analizar el documento.");
@@ -185,12 +185,45 @@ export default function DocumentsPanel({
     }
   }
 
+  async function handleAnalyzeProject() {
+    setAnalyzingProject(true);
+    setAnalyzeMessage(null);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/analizar-proyecto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "No se pudo analizar el proyecto.");
+        setAnalyzingProject(false);
+        return;
+      }
+
+      setAnalyzeMessage(
+        data.count > 0
+          ? `Análisis conjunto completo: ${data.count} hallazgo(s) cruzando ${data.documentsAnalyzed} documento(s).`
+          : `Análisis conjunto completo: no se encontraron observaciones cruzando los ${data.documentsAnalyzed} documento(s).`
+      );
+      setAnalyzingProject(false);
+      window.location.reload();
+    } catch {
+      setError("Error de conexión al analizar el proyecto.");
+      setAnalyzingProject(false);
+    }
+  }
+
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="font-display text-sm text-graphite-200">Documentación</h2>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <select
             value={discipline}
             onChange={(e) => setDiscipline(e.target.value)}
@@ -222,6 +255,21 @@ export default function DocumentsPanel({
             className="hidden"
             onChange={handleFileChange}
           />
+
+          {documents.length > 1 && (
+            <button
+              onClick={handleAnalyzeProject}
+              disabled={analyzingProject}
+              className="flex items-center gap-1.5 bg-graphite-800 hover:bg-graphite-700 border border-blueprint-500/40 disabled:opacity-50 text-blueprint-400 text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+            >
+              {analyzingProject ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
+              )}
+              {analyzingProject ? "Analizando proyecto..." : "Analizar proyecto completo"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -260,7 +308,7 @@ export default function DocumentsPanel({
                   onClick={() => handleAnalyze(doc)}
                   disabled={analyzingId === doc.id}
                   className="flex items-center gap-1 px-2 py-1.5 text-xs text-blueprint-400 hover:bg-graphite-800 rounded-md transition-colors disabled:opacity-50"
-                  title="Analizar con IA"
+                  title="Analizar solo este documento"
                 >
                   {analyzingId === doc.id ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
