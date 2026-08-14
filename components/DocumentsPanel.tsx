@@ -180,4 +180,210 @@ export default function DocumentsPanel({
       setAnalyzingId(null);
       window.location.reload();
     } catch {
-      setError("Error de
+      setError("Error de conexión al analizar el documento.");
+      setAnalyzingId(null);
+    }
+  }
+
+  async function handleAnalyzeProject() {
+    setAnalyzingProject(true);
+    setAnalyzeMessage(null);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/analizar-proyecto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "No se pudo analizar el proyecto.");
+        setAnalyzingProject(false);
+        return;
+      }
+
+      setAnalyzeMessage(
+        data.count > 0
+          ? `Análisis conjunto completo: ${data.count} hallazgo(s) cruzando ${data.documentsAnalyzed} documento(s).`
+          : `Análisis conjunto completo: no se encontraron observaciones cruzando los ${data.documentsAnalyzed} documento(s).`
+      );
+      setAnalyzingProject(false);
+      window.location.reload();
+    } catch {
+      setError("Error de conexión al analizar el proyecto.");
+      setAnalyzingProject(false);
+    }
+  }
+
+  async function handleCalculateQuantities() {
+    setCalculatingQuantities(true);
+    setAnalyzeMessage(null);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/analizar-computo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "No se pudo calcular el cómputo.");
+        setCalculatingQuantities(false);
+        return;
+      }
+
+      setAnalyzeMessage(
+        data.count > 0
+          ? `Cómputo calculado: ${data.count} ítem(s) de materiales sobre ${data.documentsAnalyzed} documento(s).`
+          : `No se pudo estimar ningún ítem con la información disponible en los ${data.documentsAnalyzed} documento(s).`
+      );
+      setCalculatingQuantities(false);
+      window.location.reload();
+    } catch {
+      setError("Error de conexión al calcular el cómputo.");
+      setCalculatingQuantities(false);
+    }
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="font-display text-sm text-graphite-200">Documentación</h2>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={discipline}
+            onChange={(e) => setDiscipline(e.target.value)}
+            className="bg-graphite-800 border border-graphite-600 rounded-md px-2.5 py-1.5 text-xs text-graphite-200 outline-none focus:border-blueprint-500"
+          >
+            {DISCIPLINAS.map((d) => (
+              <option key={d.value} value={d.value}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="flex items-center gap-1.5 bg-blueprint-500 hover:bg-blueprint-400 disabled:opacity-50 text-graphite-950 text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+          >
+            {uploading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Upload className="w-3.5 h-3.5" strokeWidth={2} />
+            )}
+            {uploading ? "Subiendo..." : "Subir PDF"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
+          {documents.length > 1 && (
+            <>
+              <button
+                onClick={handleAnalyzeProject}
+                disabled={analyzingProject}
+                className="flex items-center gap-1.5 bg-graphite-800 hover:bg-graphite-700 border border-blueprint-500/40 disabled:opacity-50 text-blueprint-400 text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+              >
+                {analyzingProject ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Layers className="w-3.5 h-3.5" strokeWidth={1.5} />
+                )}
+                {analyzingProject ? "Analizando proyecto..." : "Analizar proyecto completo"}
+              </button>
+
+              <button
+                onClick={handleCalculateQuantities}
+                disabled={calculatingQuantities}
+                className="flex items-center gap-1.5 bg-graphite-800 hover:bg-graphite-700 border border-graphite-600 disabled:opacity-50 text-graphite-300 text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+              >
+                {calculatingQuantities ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Calculator className="w-3.5 h-3.5" strokeWidth={1.5} />
+                )}
+                {calculatingQuantities ? "Calculando..." : "Calcular cómputo"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {error && <p className="text-signal-critical text-xs font-mono">{error}</p>}
+      {analyzeMessage && <p className="text-signal-ok text-xs font-mono">{analyzeMessage}</p>}
+
+      {loading ? (
+        <p className="text-graphite-500 text-xs">Cargando documentos...</p>
+      ) : documents.length === 0 ? (
+        <div className="bg-graphite-900 border border-dashed border-graphite-600 rounded-lg p-10 text-center">
+          <FileText className="w-6 h-6 text-graphite-500 mx-auto mb-3" strokeWidth={1.5} />
+          <p className="text-graphite-300 text-sm mb-1">Todavía no subiste ningún plano.</p>
+          <p className="text-graphite-500 text-xs">
+            Elegí la disciplina y tocá "Subir PDF" para cargar el primero.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          {documents.map((doc) => (
+            <div
+              key={doc.id}
+              className="bg-graphite-900 border border-graphite-700 rounded-lg p-3.5 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <FileText className="w-4 h-4 text-blueprint-400 shrink-0" strokeWidth={1.5} />
+                <div className="min-w-0">
+                  <p className="text-graphite-100 text-sm truncate">{doc.name}</p>
+                  <p className="text-graphite-500 text-xs mt-0.5 font-mono">
+                    {disciplineLabel(doc.discipline)} · Rev. {doc.revision ?? "A"} ·{" "}
+                    {formatBytes(doc.file_size)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => handleAnalyze(doc)}
+                  disabled={analyzingId === doc.id}
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs text-blueprint-400 hover:bg-graphite-800 rounded-md transition-colors disabled:opacity-50"
+                  title="Analizar solo este documento"
+                >
+                  {analyzingId === doc.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  )}
+                  {analyzingId === doc.id ? "Analizando..." : "Analizar"}
+                </button>
+                <button
+                  onClick={() => handleView(doc.file_path)}
+                  className="p-1.5 text-graphite-400 hover:text-blueprint-400 hover:bg-graphite-800 rounded-md transition-colors"
+                  title="Ver documento"
+                >
+                  <Eye className="w-4 h-4" strokeWidth={1.5} />
+                </button>
+                <button
+                  onClick={() => handleDelete(doc)}
+                  className="p-1.5 text-graphite-400 hover:text-signal-critical hover:bg-graphite-800 rounded-md transition-colors"
+                  title="Eliminar"
+                >
+                  <Trash2 className="w-4 h-4" strokeWidth={1.5} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
