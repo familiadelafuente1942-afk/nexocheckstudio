@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { AlertTriangle, ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, FileText, FileQuestion, Check } from "lucide-react";
 
 type Finding = {
   id: string;
@@ -31,11 +31,19 @@ const TYPE_LABELS: Record<string, string> = {
   OBSERVACION: "Observación",
 };
 
-export default function FindingsPanel({ projectId }: { projectId: string }) {
+export default function FindingsPanel({
+  projectId,
+  organizationId,
+}: {
+  projectId: string;
+  organizationId: string;
+}) {
   const supabase = createClient();
   const [findings, setFindings] = useState<Finding[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [rfiCreatedFor, setRfiCreatedFor] = useState<Set<string>>(new Set());
+  const [creatingRfiFor, setCreatingRfiFor] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -47,10 +55,46 @@ export default function FindingsPanel({ projectId }: { projectId: string }) {
         .order("created_at", { ascending: false });
 
       setFindings(data ?? []);
+
+      const { data: existingRfis } = await supabase
+        .from("rfis")
+        .select("finding_id")
+        .eq("project_id", projectId);
+
+      setRfiCreatedFor(new Set((existingRfis ?? []).map((r) => r.finding_id).filter(Boolean)));
       setLoading(false);
     }
     load();
   }, [projectId]);
+
+  async function handleGenerateRfi(f: Finding) {
+    setCreatingRfiFor(f.id);
+
+    const { count } = await supabase
+      .from("rfis")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId);
+
+    const nextNumber = (count ?? 0) + 1;
+    const code = `RFI-${String(nextNumber).padStart(3, "0")}`;
+
+    const question = `${f.description}${f.recommendation ? `\n\nRecomendación técnica: ${f.recommendation}` : ""}\n\nFavor confirmar cómo proceder antes de continuar con la ejecución.`;
+
+    const { error } = await supabase.from("rfis").insert({
+      project_id: projectId,
+      organization_id: organizationId,
+      finding_id: f.id,
+      code,
+      subject: f.title,
+      question,
+    });
+
+    if (!error) {
+      setRfiCreatedFor((prev) => new Set(prev).add(f.id));
+    }
+
+    setCreatingRfiFor(null);
+  }
 
   if (loading) {
     return <p className="text-graphite-500 text-xs">Cargando hallazgos...</p>;
@@ -72,6 +116,7 @@ export default function FindingsPanel({ projectId }: { projectId: string }) {
       {findings.map((f) => {
         const style = SEVERITY_STYLES[f.severity] ?? SEVERITY_STYLES.MEDIA;
         const isExpanded = expandedId === f.id;
+        const hasRfi = rfiCreatedFor.has(f.id);
 
         return (
           <div
@@ -127,6 +172,24 @@ export default function FindingsPanel({ projectId }: { projectId: string }) {
                     <p className="text-graphite-300 text-xs">{f.recommendation}</p>
                   </div>
                 )}
+
+                <div className="pt-1">
+                  {hasRfi ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-signal-ok">
+                      <Check className="w-3.5 h-3.5" strokeWidth={2} />
+                      RFI generado
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleGenerateRfi(f)}
+                      disabled={creatingRfiFor === f.id}
+                      className="flex items-center gap-1.5 text-xs text-blueprint-400 hover:text-blueprint-300 disabled:opacity-50"
+                    >
+                      <FileQuestion className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      {creatingRfiFor === f.id ? "Generando..." : "Generar RFI"}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
