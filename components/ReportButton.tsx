@@ -48,6 +48,12 @@ export default function ReportButton({
       .select("name, discipline, revision")
       .eq("project_id", projectId);
 
+    const { data: quantityItems } = await supabase
+      .from("quantity_items")
+      .select("material, description, unit, quantity, waste_percent, confidence_score, source_documents")
+      .eq("project_id", projectId)
+      .order("material", { ascending: true });
+
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const marginX = 18;
@@ -103,6 +109,8 @@ export default function ReportButton({
     doc.text(`Hallazgos totales: ${findings?.length ?? 0} (${critCount} críticos, ${altaCount} altos)`, marginX, y);
     y += 6;
     doc.text(`RFIs generados: ${rfis?.length ?? 0}`, marginX, y);
+    y += 6;
+    doc.text(`Ítems de cómputo: ${quantityItems?.length ?? 0}`, marginX, y);
     y += 14;
 
     if (documents && documents.length > 0) {
@@ -159,6 +167,52 @@ export default function ReportButton({
           doc.setTextColor(130, 130, 130);
           doc.text(`Documentos: ${f.source_documents}`, marginX, y);
           y += 5;
+        }
+
+        y += 4;
+      }
+      y += 6;
+    }
+
+    if (quantityItems && quantityItems.length > 0) {
+      addPageIfNeeded(20);
+      doc.setFontSize(13);
+      doc.setTextColor(20, 20, 20);
+      doc.text("Cómputo de materiales (preliminar)", marginX, y);
+      y += 8;
+
+      doc.setFontSize(8);
+      doc.setTextColor(130, 130, 130);
+      doc.text("Material", marginX, y);
+      doc.text("Cantidad", marginX + 90, y);
+      doc.text("Desp.", marginX + 130, y);
+      doc.text("Confianza", marginX + 155, y);
+      y += 5;
+      doc.setDrawColor(220, 220, 220);
+      doc.line(marginX, y, pageWidth - marginX, y);
+      y += 5;
+
+      for (const it of quantityItems) {
+        addPageIfNeeded(10);
+
+        doc.setFontSize(9);
+        doc.setTextColor(30, 30, 30);
+        const materialLines = doc.splitTextToSize(it.material, 85);
+        doc.text(materialLines, marginX, y);
+
+        doc.setTextColor(70, 70, 70);
+        doc.text(`${it.quantity} ${it.unit}`, marginX + 90, y);
+        doc.text(`${it.waste_percent}%`, marginX + 130, y);
+        doc.text(`${it.confidence_score}%`, marginX + 155, y);
+
+        y += materialLines.length * 4.5;
+
+        if (it.source_documents) {
+          doc.setFontSize(7.5);
+          doc.setTextColor(140, 140, 140);
+          const srcLines = doc.splitTextToSize(`Fuente: ${it.source_documents}`, pageWidth - marginX * 2);
+          doc.text(srcLines, marginX, y);
+          y += srcLines.length * 3.8;
         }
 
         y += 4;
