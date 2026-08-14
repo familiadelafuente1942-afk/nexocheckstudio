@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, FileText } from "lucide-react";
 
 type Finding = {
   id: string;
@@ -13,6 +13,7 @@ type Finding = {
   recommendation: string | null;
   confidence_score: number;
   status: string;
+  source_documents: string | null;
   created_at: string;
 };
 
@@ -41,7 +42,7 @@ export default function FindingsPanel({ projectId }: { projectId: string }) {
       setLoading(true);
       const { data } = await supabase
         .from("findings")
-        .select("id, finding_type, severity, title, description, recommendation, confidence_score, status, created_at")
+        .select("id, finding_type, severity, title, description, recommendation, confidence_score, status, source_documents, created_at")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false });
 
@@ -60,7 +61,7 @@ export default function FindingsPanel({ projectId }: { projectId: string }) {
       <div className="bg-graphite-900 border border-dashed border-graphite-600 rounded-lg p-8 text-center">
         <AlertTriangle className="w-5 h-5 text-graphite-500 mx-auto mb-2" strokeWidth={1.5} />
         <p className="text-graphite-400 text-sm">
-          Todavía no hay hallazgos. Analizá un documento con IA para generarlos.
+          Todavía no hay hallazgos. Analizá un documento o el proyecto completo para generarlos.
         </p>
       </div>
     );
@@ -91,6 +92,7 @@ export default function FindingsPanel({ projectId }: { projectId: string }) {
                   <p className="text-graphite-100 text-sm truncate">{f.title}</p>
                   <p className="text-graphite-500 text-xs font-mono mt-0.5">
                     {TYPE_LABELS[f.finding_type] ?? f.finding_type} · Confianza {f.confidence_score}%
+                    {f.source_documents ? " · Análisis conjunto" : ""}
                   </p>
                 </div>
               </div>
@@ -104,6 +106,19 @@ export default function FindingsPanel({ projectId }: { projectId: string }) {
             {isExpanded && (
               <div className="px-3.5 pb-3.5 space-y-2 border-t border-graphite-800 pt-3">
                 <p className="text-graphite-300 text-sm">{f.description}</p>
+
+                {f.source_documents && (
+                  <div className="flex items-start gap-2 bg-graphite-800/50 rounded-md p-2.5">
+                    <FileText className="w-3.5 h-3.5 text-blueprint-400 mt-0.5 shrink-0" strokeWidth={1.5} />
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-graphite-500 font-medium mb-1">
+                        Documentos involucrados
+                      </p>
+                      <p className="text-graphite-300 text-xs">{f.source_documents}</p>
+                    </div>
+                  </div>
+                )}
+
                 {f.recommendation && (
                   <div className="bg-graphite-800 rounded-md p-2.5">
                     <p className="text-[10px] uppercase tracking-wide text-graphite-500 font-medium mb-1">
