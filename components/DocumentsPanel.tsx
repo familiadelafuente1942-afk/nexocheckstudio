@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Upload, FileText, Eye, Trash2, Loader2 } from "lucide-react";
+import { Upload, FileText, Eye, Trash2, Loader2, Sparkles } from "lucide-react";
 
 type DocumentRow = {
   id: string;
@@ -51,6 +51,8 @@ export default function DocumentsPanel({
   const [uploading, setUploading] = useState(false);
   const [discipline, setDiscipline] = useState("SIN_CLASIFICAR");
   const [error, setError] = useState<string | null>(null);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [analyzeMessage, setAnalyzeMessage] = useState<string | null>(null);
 
   async function loadDocuments() {
     setLoading(true);
@@ -149,6 +151,40 @@ export default function DocumentsPanel({
     loadDocuments();
   }
 
+  async function handleAnalyze(doc: DocumentRow) {
+    setAnalyzingId(doc.id);
+    setAnalyzeMessage(null);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/analizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: doc.id }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "No se pudo analizar el documento.");
+        setAnalyzingId(null);
+        return;
+      }
+
+      setAnalyzeMessage(
+        data.count > 0
+          ? `Se encontraron ${data.count} hallazgo(s) en "${doc.name}".`
+          : `No se encontraron observaciones en "${doc.name}".`
+      );
+      setAnalyzingId(null);
+
+      window.location.reload();
+    } catch {
+      setError("Error de conexión al analizar el documento.");
+      setAnalyzingId(null);
+    }
+  }
+
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
@@ -190,6 +226,7 @@ export default function DocumentsPanel({
       </div>
 
       {error && <p className="text-signal-critical text-xs font-mono">{error}</p>}
+      {analyzeMessage && <p className="text-signal-ok text-xs font-mono">{analyzeMessage}</p>}
 
       {loading ? (
         <p className="text-graphite-500 text-xs">Cargando documentos...</p>
@@ -219,6 +256,19 @@ export default function DocumentsPanel({
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => handleAnalyze(doc)}
+                  disabled={analyzingId === doc.id}
+                  className="flex items-center gap-1 px-2 py-1.5 text-xs text-blueprint-400 hover:bg-graphite-800 rounded-md transition-colors disabled:opacity-50"
+                  title="Analizar con IA"
+                >
+                  {analyzingId === doc.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
+                  )}
+                  {analyzingId === doc.id ? "Analizando..." : "Analizar"}
+                </button>
                 <button
                   onClick={() => handleView(doc.file_path)}
                   className="p-1.5 text-graphite-400 hover:text-blueprint-400 hover:bg-graphite-800 rounded-md transition-colors"
