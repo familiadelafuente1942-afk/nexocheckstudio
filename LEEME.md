@@ -1,45 +1,30 @@
-# NEXOCHECKSTUDIO — Etapa 1
+# NEXOCHECKSTUDIO — Proyecto completo
 
-## Qué es esto
+Este zip contiene el código completo del proyecto tal como está funcionando
+en nexocheckstudio.vercel.app al momento de generarlo.
 
-Esta es la primera versión de la plataforma: login, registro, creación de tu
-organización, creación de obras y un dashboard base. Todavía no hay carga de
-planos ni análisis con IA — eso empieza en Etapa 2.
+## IMPORTANTE sobre cómo subir esto a GitHub desde iPad
 
-## Paso 1 — Cargar el esquema en Supabase
+La vez anterior que probamos con zip, Safari "aplastó" las carpetas al
+subirlas y se generó un quilombo. Para que esta vez funcione:
 
-1. Entrá a tu proyecto `nexocheckstudio` en supabase.com
-2. En el menú izquierdo, tocá **SQL Editor**
-3. Tocá **New query**
-4. Abrí el archivo `supabase/etapa1_schema.sql` de esta carpeta, copiá todo el contenido
-5. Pegalo en el editor y tocá **Run**
-6. Debería decir "Success. No rows returned" — eso está bien, son solo tablas
+1. Extraé el zip en la app Archivos del iPad (mantené presionado el zip → "Descomprimir")
+2. Andá a tu repo en GitHub → "Add file" → "Upload files"
+3. **Desde la app Archivos**, entrá a la carpeta ya descomprimida `nexocheckstudio_full`
+4. Seleccioná **todo el contenido de adentro** (no la carpeta en sí) usando "Seleccionar" arriba a la derecha en Archivos, y elegí todos los archivos y subcarpetas
+5. Arrastralos TODOS JUNTOS a la zona de carga de GitHub en un solo gesto (esto es clave: si los arrastrás de a uno o en tandas separadas, algunas carpetas se pueden aplanar)
+6. Antes de confirmar el commit, revisá en la vista previa de GitHub que las carpetas `app`, `components`, `lib` aparezcan como carpetas (con el ícono de carpeta), no como si todos los archivos quedaran sueltos
 
-## Paso 2 — Subir el código a GitHub
+Si after subir algo se ve mal (archivos sueltos que deberían estar en una
+carpeta), es más fácil corregirlo archivo por archivo como veníamos
+haciendo, que reintentar el zip entero de nuevo.
 
-1. Entrá al repositorio `nexocheckstudio` que ya creaste en GitHub
-2. Como está vacío, vas a ver un link que dice **"uploading an existing file"** — tocalo
-   (si no lo ves, tocá "Add file" → "Upload files")
-3. Arrastrá **todos los archivos y carpetas** de este proyecto (menos `node_modules`,
-   que no existe todavía, así que no hay problema)
-4. Abajo, en "Commit changes", dejá el mensaje por defecto y tocá **"Commit changes"**
+## Variables de entorno necesarias en Vercel
 
-## Paso 3 — Conectar con Vercel
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+- ANTHROPIC_API_KEY (marcada como Sensitive)
 
-1. Entrá a vercel.com con tu cuenta
-2. Tocá **"Add New" → "Project"**
-3. Elegí el repositorio `nexocheckstudio`
-4. Antes de tocar "Deploy", abrí la sección **"Environment Variables"**
-5. Agregá estas dos variables (los valores están en Supabase → Settings → API):
-   - `NEXT_PUBLIC_SUPABASE_URL` → el "Project URL"
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → la "anon public" key
-6. Tocá **"Deploy"** y esperá 1-2 minutos
+## Buckets de Supabase Storage necesarios
 
-## Paso 4 — Probar
-
-1. Abrí la URL que te dio Vercel
-2. Creá tu cuenta desde "Crear cuenta"
-3. Confirmá el correo (revisá spam si no llega)
-4. Iniciá sesión, creá tu organización, y creá una obra de prueba
-
-Cuando lo hayas probado, decime "Listo" y seguimos con Etapa 2 (carga de PDF y visor de planos).
+- `documentos` (privado)

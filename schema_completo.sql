@@ -1,0 +1,11 @@
+-- ============================================================
+-- NEXOCHECKSTUDIO — Esquema completo de referencia
+-- Este archivo es solo de referencia/backup.
+-- Las tablas ya deberían existir en tu Supabase si veniamos
+-- trabajando desde el chat. No hace falta volver a correrlo
+-- a menos que estes armando el proyecto desde cero.
+-- ============================================================
+
+-- Ver los mensajes del chat para el detalle completo de cada
+-- tabla (organizations, profiles, projects, documents, findings,
+-- rfis, quantity_items) y sus políticas RLS.
