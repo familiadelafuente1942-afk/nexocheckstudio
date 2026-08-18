@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard, FileStack, Boxes, ShieldAlert, ListChecks, Package, Calculator,
   FileCheck2, GitCompareArrows, FileQuestion, Bot, FileBarChart, BookMarked, Users,
-  Settings, ScanLine, LogOut, X,
+  Settings, ScanLine, LogOut, X, Image as ImageIcon,
 } from "lucide-react";
 
 export default function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void; }) {
@@ -26,6 +26,7 @@ export default function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; 
     { label: "Materiales", href: projectId ? `/proyectos/${projectId}#computo` : "/materiales", icon: Package, active: !!projectId },
     { label: "Cómputo", href: projectId ? `/proyectos/${projectId}#computo` : "/computo", icon: Calculator, active: !!projectId },
     { label: "Documentación", href: projectId ? `/proyectos/${projectId}#documentos` : "/documentacion", icon: FileCheck2, active: !!projectId },
+    { label: "Renders", href: projectId ? `/proyectos/${projectId}#renders` : "/renders", icon: ImageIcon, active: !!projectId },
     { label: "Comparador", href: "/comparador", icon: GitCompareArrows, active: false },
     { label: "RFIs", href: projectId ? `/proyectos/${projectId}#rfis` : "/rfis", icon: FileQuestion, active: !!projectId },
     { label: "Asistente IA", href: "/asistente", icon: Bot, active: false },
