@@ -81,7 +81,8 @@ export default function DocumentsPanel({ projectId, organizationId }: { projectI
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          setError(data.error || "No se pudo convertir el archivo CAD.");
+          const base = data.error || "No se pudo convertir el archivo CAD.";
+          setError(data.detail ? `${base}: ${data.detail}` : base);
           setConvertingCad(false);
           setUploading(false);
           return;
