@@ -39,6 +39,7 @@ export default function DocumentsPanel({ projectId, organizationId }: { projectI
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [convertingCad, setConvertingCad] = useState(false);
   const [discipline, setDiscipline] = useState("SIN_CLASIFICAR");
   const [error, setError] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
@@ -66,22 +67,56 @@ export default function DocumentsPanel({ projectId, organizationId }: { projectI
     setUploading(true);
     setError(null);
 
-    const isPdf = file.type === "application/pdf";
-    const isImg = file.type.startsWith("image/");
-    if (!isPdf && !isImg) { setError("Solo se aceptan archivos PDF o fotos (JPG/PNG)."); setUploading(false); return; }
+    let fileToUpload = file;
+
+    // Si es un archivo CAD (DWG/DXF), primero lo convertimos a PDF
+    // vía CloudConvert antes de seguir con el flujo normal de subida.
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const isCad = ext === "dwg" || ext === "dxf";
+
+    if (isCad) {
+      setConvertingCad(true);
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/convertir-cad", { method: "POST", body: form });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setError(data.error || "No se pudo convertir el archivo CAD.");
+          setConvertingCad(false);
+          setUploading(false);
+          return;
+        }
+
+        const blob = await res.blob();
+        const newName = file.name.replace(/\.(dwg|dxf)$/i, ".pdf");
+        fileToUpload = new File([blob], newName, { type: "application/pdf" });
+      } catch {
+        setError("Error de conexión al convertir el archivo CAD.");
+        setConvertingCad(false);
+        setUploading(false);
+        return;
+      }
+      setConvertingCad(false);
+    }
+
+    const isPdf = fileToUpload.type === "application/pdf";
+    const isImg = fileToUpload.type.startsWith("image/");
+    if (!isPdf && !isImg) { setError("Solo se aceptan archivos PDF, CAD (DWG/DXF) o fotos (JPG/PNG)."); setUploading(false); return; }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Tu sesión expiró. Volvé a iniciar sesión."); setUploading(false); return; }
 
-    const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const cleanName = fileToUpload.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${organizationId}/${projectId}/${Date.now()}_${cleanName}`;
 
-    const { error: uploadError } = await supabase.storage.from("documentos").upload(path, file);
+    const { error: uploadError } = await supabase.storage.from("documentos").upload(path, fileToUpload);
     if (uploadError) { setError("No se pudo subir el archivo. Intentá de nuevo."); setUploading(false); return; }
 
     const { error: insertError } = await supabase.from("documents").insert({
-      project_id: projectId, organization_id: organizationId, name: file.name, discipline,
-      file_path: path, mime_type: file.type, file_size: file.size, uploaded_by: user.id,
+      project_id: projectId, organization_id: organizationId, name: fileToUpload.name, discipline,
+      file_path: path, mime_type: fileToUpload.type, file_size: fileToUpload.size, uploaded_by: user.id,
     });
 
     if (insertError) { setError("El archivo se subió pero no se pudo registrar. Avisale a Claude."); setUploading(false); return; }
@@ -207,9 +242,9 @@ export default function DocumentsPanel({ projectId, organizationId }: { projectI
           <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
             className="flex items-center gap-1.5 bg-blueprint-500 hover:bg-blueprint-400 disabled:opacity-50 text-graphite-950 text-xs font-medium px-3 py-1.5 rounded-md transition-colors">
             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" strokeWidth={2} />}
-            {uploading ? "Subiendo..." : "Subir PDF"}
+            {convertingCad ? "Convirtiendo CAD..." : uploading ? "Subiendo..." : "Subir PDF / CAD"}
           </button>
-          <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileChange} />
+          <input ref={fileInputRef} type="file" accept="application/pdf,.dwg,.dxf" className="hidden" onChange={handleFileChange} />
 
           <button onClick={() => cameraInputRef.current?.click()} disabled={uploading}
             className="flex items-center gap-1.5 bg-graphite-800 hover:bg-graphite-700 border border-graphite-600 disabled:opacity-50 text-graphite-200 text-xs font-medium px-3 py-1.5 rounded-md transition-colors">
@@ -243,7 +278,7 @@ export default function DocumentsPanel({ projectId, organizationId }: { projectI
         <div className="bg-graphite-900 border border-dashed border-graphite-600 rounded-lg p-10 text-center">
           <FileText className="w-6 h-6 text-graphite-500 mx-auto mb-3" strokeWidth={1.5} />
           <p className="text-graphite-300 text-sm mb-1">Todavía no subiste ningún plano.</p>
-          <p className="text-graphite-500 text-xs">Elegí la disciplina y tocá "Subir PDF" o "Escanear / Foto" para cargar el primero.</p>
+          <p className="text-graphite-500 text-xs">Elegí la disciplina y tocá "Subir PDF / CAD" o "Escanear / Foto" para cargar el primero.</p>
         </div>
       ) : (
         <div className="grid gap-2">
