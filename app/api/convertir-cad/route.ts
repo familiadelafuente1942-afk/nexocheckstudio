@@ -38,7 +38,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Crear el job en CloudConvert: import/upload -> convert -> export/url
     const jobRes = await fetch(`${CLOUDCONVERT_BASE}/jobs`, {
       method: "POST",
       headers: {
@@ -55,7 +54,6 @@ export async function POST(req: NextRequest) {
             input: "import-file",
             input_format: ext,
             output_format: "pdf",
-            engine: "cadconvert",
           },
           "export-file": {
             operation: "export/url",
@@ -80,7 +78,6 @@ export async function POST(req: NextRequest) {
     const uploadUrl = importTask.result.form.url;
     const uploadParams = importTask.result.form.parameters;
 
-    // 2. Subir el archivo real al form que dio CloudConvert
     const uploadForm = new FormData();
     Object.entries(uploadParams).forEach(([key, value]) => {
       uploadForm.append(key, value as string);
@@ -100,7 +97,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. Esperar a que el job termine (polling)
     const jobId = job.data.id;
     let finished = false;
     let attempts = 0;
@@ -144,7 +140,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Descargar el PDF convertido y devolverlo al cliente
     const pdfRes = await fetch(exportUrl);
     const pdfBuffer = await pdfRes.arrayBuffer();
     const newFileName = fileName.replace(/\.(dwg|dxf)$/i, ".pdf");
