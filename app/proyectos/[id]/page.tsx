@@ -10,6 +10,7 @@ import QuantitiesPanel from "@/components/QuantitiesPanel";
 import DeleteProjectButton from "@/components/DeleteProjectButton";
 import EditProjectButton from "@/components/EditProjectButton";
 import DocumentCompletenessPanel from "@/components/DocumentCompletenessPanel";
+import RendersPanel from "@/components/RendersPanel";
 
 export default async function ObraDetallePage({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -87,6 +88,10 @@ export default async function ObraDetallePage({ params }: { params: { id: string
           <DocumentCompletenessPanel projectId={project.id} />
           <DocumentsPanel projectId={project.id} organizationId={project.organization_id} />
         </div>
+
+        <section id="renders" className="space-y-3">
+          <RendersPanel projectId={project.id} organizationId={project.organization_id} />
+        </section>
 
         <section id="hallazgos" className="space-y-3">
           <h2 className="font-display text-sm text-graphite-200">Hallazgos</h2>
