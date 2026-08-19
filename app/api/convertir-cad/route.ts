@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const maxDuration = 60;
+
+
 // Endpoint: POST /api/convertir-cad
 // Recibe un archivo DWG/DXF (multipart/form-data, campo "file")
 // Lo convierte a PDF usando CloudConvert y devuelve el PDF resultante
