@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-export const maxDuration = 120;
-
-const MAX_DOCUMENTS = 15;
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const supabase = createClient();
@@ -16,96 +14,143 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  const { projectId } = await request.json();
+  const { documentId } = await request.json();
 
-  if (!projectId) {
-    return NextResponse.json({ error: "Falta projectId" }, { status: 400 });
+  if (!documentId) {
+    return NextResponse.json({ error: "Falta documentId" }, { status: 400 });
   }
 
-  const { data: project, error: projectError } = await supabase
-    .from("projects")
-    .select("id, name, organization_id")
-    .eq("id", projectId)
+  const { data: doc, error: docError } = await supabase
+    .from("documents")
+    .select("id, name, discipline, file_path, project_id, organization_id")
+    .eq("id", documentId)
     .single();
 
-  if (projectError || !project) {
-    return NextResponse.json({ error: "Obra no encontrada" }, { status: 404 });
+  if (docError || !doc) {
+    return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
   }
 
-  const { data: docs, error: docsError } = await supabase
-    .from("documents")
-    .select("id, name, discipline, file_path")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: true });
+  const { data: signedUrlData, error: signError } = await supabase.storage
+    .from("documentos")
+    .createSignedUrl(doc.file_path, 60);
 
-  if (docsError || !docs || docs.length === 0) {
-    return NextResponse.json({ error: "No hay documentos para calcular el cómputo" }, { status: 400 });
+  if (signError || !signedUrlData) {
+    return NextResponse.json({ error: "No se pudo acceder al archivo" }, { status: 500 });
   }
 
-  if (docs.length > MAX_DOCUMENTS) {
-    return NextResponse.json(
-      { error: `Por ahora se pueden procesar hasta ${MAX_DOCUMENTS} documentos juntos. Esta obra tiene ${docs.length}.` },
-      { status: 400 }
-    );
-  }
+  const fileResponse = await fetch(signedUrlData.signedUrl);
+  const fileBuffer = await fileResponse.arrayBuffer();
+  const base64 = Buffer.from(fileBuffer).toString("base64");
 
-  const contentBlocks: Array<Record<string, unknown>> = [];
-
-  for (const doc of docs) {
-    const { data: signedUrlData, error: signError } = await supabase.storage
-      .from("documentos")
-      .createSignedUrl(doc.file_path, 60);
-
-    if (signError || !signedUrlData) continue;
-
-    const fileResponse = await fetch(signedUrlData.signedUrl);
-    const fileBuffer = await fileResponse.arrayBuffer();
-    const base64 = Buffer.from(fileBuffer).toString("base64");
-
-    contentBlocks.push({
-      type: "document",
-      source: {
-        type: "base64",
-        media_type: "application/pdf",
-        data: base64,
-      },
-      title: doc.name,
-    });
-  }
-
-  if (contentBlocks.length === 0) {
-    return NextResponse.json({ error: "No se pudo acceder a ningún documento" }, { status: 500 });
-  }
-
-  const docList = docs.map((d) => `- ${d.name} (${d.discipline})`).join("\n");
-
-  contentBlocks.push({
-    type: "text",
-    text: `Calculá el cómputo de materiales de esta obra: "${project.name}". Documentos incluidos:\n${docList}\n\nEstimá cantidades únicamente cuando exista información suficiente en los planos (medidas, superficies, cotas). Para cada ítem indicá en "source_documents" de qué documento(s) sale el dato.`,
-  });
-
-  const systemPrompt = `Sos un asistente técnico de cómputo y presupuesto de obras de construcción. Analizás planos técnicos para identificar y cuantificar materiales y elementos constructivos.
+  const systemPrompt = `Sos un asistente técnico de auditoría de proyectos de construcción. Analizás un plano o documento técnico en PDF y devolvés observaciones útiles para arquitectos, ingenieros y constructores.
 
 Reglas:
-- NUNCA inventes cantidades que no puedas fundamentar en el documento (medidas, superficies, cantidades de elementos visibles).
-- Si no hay información suficiente para calcular una cantidad con razonable certeza, NO la incluyas.
-- Preferí categorías amplias y útiles: hormigón, mampostería, superficie de pisos, superficie de cielorrasos, pintura, puertas, ventanas, artefactos sanitarios, luminarias, tomas eléctricas, cañerías, etc. — solo las que puedas fundamentar.
-- Este sistema es de asistencia preventiva, un cómputo PRELIMINAR. NO reemplaza el cómputo definitivo de un profesional.
+- NUNCA inventes información que no esté en el documento.
+- Si no hay suficiente información para una observación, no la generes.
+- Este sistema es de asistencia preventiva, NO reemplaza al profesional responsable.
 - Devolvé SIEMPRE y ÚNICAMENTE un JSON válido, sin texto antes ni después, con este formato exacto:
 
 {
-  "items": [
+  "findings": [
     {
-      "material": "nombre del material o elemento",
-      "description": "breve aclaración si hace falta",
-      "unit": "m2" | "m3" | "ml" | "un" | "kg",
-      "quantity": número,
-      "waste_percent": número (desperdicio recomendado, ej. 10),
-      "confidence_score": número entre 0 y 100,
-      "source_documents": ["nombre exacto del documento"]
+      "finding_type": "INCONSISTENCIA" | "INFORMACION_FALTANTE" | "RIESGO_CONSTRUCTIVO" | "OBSERVACION",
+      "severity": "CRITICA" | "ALTA" | "MEDIA" | "BAJA",
+      "title": "string corto, máx 80 caracteres",
+      "description": "explicación clara de la observación",
+      "recommendation": "qué debería revisar o hacer el profesional",
+      "confidence_score": número entre 0 y 100
     }
   ]
 }
 
-Si no hay información suficiente para ningún ítem, devolvé { "items": [] }.
-Gener
+Si el documento está en orden y no hay observaciones relevantes, devolvé { "findings": [] }.
+Generá como máximo 8 observaciones, priorizando las más importantes.`;
+
+  try {
+    const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-5",
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: base64,
+                },
+              },
+              {
+                type: "text",
+                text: `Analizá este documento técnico. Nombre del archivo: "${doc.name}". Disciplina declarada: ${doc.discipline}.`,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!anthropicResponse.ok) {
+      const errText = await anthropicResponse.text();
+      return NextResponse.json(
+        { error: "Error al analizar con IA", detail: errText },
+        { status: 500 }
+      );
+    }
+
+    const result = await anthropicResponse.json();
+    const textBlock = result.content?.find((c: { type: string }) => c.type === "text");
+    const rawText = textBlock?.text ?? "{}";
+
+    const cleaned = rawText.replace(/```json|```/g, "").trim();
+    let parsed: { findings: Array<Record<string, unknown>> };
+
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return NextResponse.json({ error: "La IA devolvió un formato inválido" }, { status: 500 });
+    }
+
+    const findings = parsed.findings ?? [];
+
+    if (findings.length > 0) {
+      const rows = findings.map((f) => ({
+        project_id: doc.project_id,
+        organization_id: doc.organization_id,
+        document_id: doc.id,
+        finding_type: f.finding_type ?? "OBSERVACION",
+        severity: f.severity ?? "MEDIA",
+        title: f.title ?? "Sin título",
+        description: f.description ?? "",
+        recommendation: f.recommendation ?? null,
+        confidence_score: f.confidence_score ?? 70,
+      }));
+
+      const { error: insertError } = await supabase.from("findings").insert(rows);
+
+      if (insertError) {
+        return NextResponse.json(
+          { error: "No se pudieron guardar los hallazgos", detail: insertError.message },
+          { status: 500 }
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true, count: findings.length });
+  } catch (err) {
+    return NextResponse.json(
+      { error: "Error inesperado al analizar", detail: String(err) },
+      { status: 500 }
+    );
+  }
+}
