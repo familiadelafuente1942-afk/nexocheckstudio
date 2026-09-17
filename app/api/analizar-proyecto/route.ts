@@ -39,12 +39,12 @@ export async function POST(request: NextRequest) {
     .order("created_at", { ascending: true });
 
   if (docsError || !docs || docs.length === 0) {
-    return NextResponse.json({ error: "No hay documentos para analizar" }, { status: 400 });
+    return NextResponse.json({ error: "No hay documentos para calcular el cómputo" }, { status: 400 });
   }
 
   if (docs.length > MAX_DOCUMENTS) {
     return NextResponse.json(
-      { error: `Por ahora se pueden analizar hasta ${MAX_DOCUMENTS} documentos juntos. Esta obra tiene ${docs.length}.` },
+      { error: `Por ahora se pueden procesar hasta ${MAX_DOCUMENTS} documentos juntos. Esta obra tiene ${docs.length}.` },
       { status: 400 }
     );
   }
@@ -81,33 +81,34 @@ export async function POST(request: NextRequest) {
 
   contentBlocks.push({
     type: "text",
-    text: `Analizá el conjunto completo de documentos de esta obra: "${project.name}". Documentos incluidos:\n${docList}\n\nBuscá especialmente contradicciones e interferencias ENTRE disciplinas distintas (por ejemplo: estructura vs. sanitaria, arquitectura vs. eléctrica), no solo errores dentro de un mismo plano. Para cada hallazgo, indicá en "source_documents" los nombres exactos de los documentos involucrados.`,
+    text: `Calculá el cómputo de materiales de esta obra: "${project.name}". Documentos incluidos:\n${docList}\n\nEstimá cantidades únicamente cuando exista información suficiente en los planos (medidas, superficies, cotas). Para cada ítem indicá en "source_documents" de qué documento(s) sale el dato.`,
   });
 
-  const systemPrompt = `Sos un asistente técnico de auditoría de proyectos de construcción. Analizás el conjunto completo de planos de una obra (varios documentos a la vez) para detectar contradicciones, interferencias entre disciplinas, e información faltante que solo se nota comparando varios planos entre sí.
+  const systemPrompt = `Sos un asistente técnico de cómputo y presupuesto de obras de construcción. Analizás planos técnicos para identificar y cuantificar materiales y elementos constructivos.
 
 Reglas:
-- NUNCA inventes información que no esté en los documentos.
-- Priorizá observaciones que crucen información entre distintos planos/disciplinas — ese es el valor de este análisis conjunto.
-- Este sistema es de asistencia preventiva, NO reemplaza al profesional responsable.
+- NUNCA inventes cantidades que no puedas fundamentar en el documento (medidas, superficies, cantidades de elementos visibles).
+- Si no hay información suficiente para calcular una cantidad con razonable certeza, NO la incluyas.
+- Preferí categorías amplias y útiles: hormigón, mampostería, superficie de pisos, superficie de cielorrasos, pintura, puertas, ventanas, artefactos sanitarios, luminarias, tomas eléctricas, cañerías, etc. — solo las que puedas fundamentar.
+- Este sistema es de asistencia preventiva, un cómputo PRELIMINAR. NO reemplaza el cómputo definitivo de un profesional.
 - Devolvé SIEMPRE y ÚNICAMENTE un JSON válido, sin texto antes ni después, con este formato exacto:
 
 {
-  "findings": [
+  "items": [
     {
-      "finding_type": "INCONSISTENCIA" | "INFORMACION_FALTANTE" | "RIESGO_CONSTRUCTIVO" | "OBSERVACION",
-      "severity": "CRITICA" | "ALTA" | "MEDIA" | "BAJA",
-      "title": "string corto, máx 80 caracteres",
-      "description": "explicación clara de la observación",
-      "recommendation": "qué debería revisar o hacer el profesional",
+      "material": "nombre del material o elemento",
+      "description": "breve aclaración si hace falta",
+      "unit": "m2" | "m3" | "ml" | "un" | "kg",
+      "quantity": número,
+      "waste_percent": número (desperdicio recomendado, ej. 10),
       "confidence_score": número entre 0 y 100,
-      "source_documents": ["nombre exacto del documento 1", "nombre exacto del documento 2"]
+      "source_documents": ["nombre exacto del documento"]
     }
   ]
 }
 
-Si no hay observaciones relevantes, devolvé { "findings": [] }.
-Generá como máximo 15 observaciones, priorizando las más importantes y las que cruzan información entre documentos.`;
+Si no hay información suficiente para ningún ítem, devolvé { "items": [] }.
+Generá como máximo 20 ítems, priorizando los más significativos para el presupuesto de obra.`;
 
   try {
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -118,7 +119,7 @@ Generá como máximo 15 observaciones, priorizando las más importantes y las qu
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-5",
         max_tokens: 6000,
         system: systemPrompt,
         messages: [
@@ -133,7 +134,7 @@ Generá como máximo 15 observaciones, priorizando las más importantes y las qu
     if (!anthropicResponse.ok) {
       const errText = await anthropicResponse.text();
       return NextResponse.json(
-        { error: "Error al analizar con IA", detail: errText },
+        { error: "Error al calcular el cómputo con IA", detail: errText },
         { status: 500 }
       );
     }
@@ -143,45 +144,45 @@ Generá como máximo 15 observaciones, priorizando las más importantes y las qu
     const rawText = textBlock?.text ?? "{}";
     const cleaned = rawText.replace(/```json|```/g, "").trim();
 
-    let parsed: { findings: Array<Record<string, unknown>> };
+    let parsed: { items: Array<Record<string, unknown>> };
     try {
       parsed = JSON.parse(cleaned);
     } catch {
       return NextResponse.json({ error: "La IA devolvió un formato inválido" }, { status: 500 });
     }
 
-    const findings = parsed.findings ?? [];
+    const items = parsed.items ?? [];
 
-    if (findings.length > 0) {
-      const rows = findings.map((f) => ({
+    if (items.length > 0) {
+      const rows = items.map((it) => ({
         project_id: project.id,
         organization_id: project.organization_id,
         document_id: null,
-        finding_type: f.finding_type ?? "OBSERVACION",
-        severity: f.severity ?? "MEDIA",
-        title: f.title ?? "Sin título",
-        description: f.description ?? "",
-        recommendation: f.recommendation ?? null,
-        confidence_score: f.confidence_score ?? 70,
-        source_documents: Array.isArray(f.source_documents)
-          ? (f.source_documents as string[]).join(", ")
+        material: it.material ?? "Sin especificar",
+        description: it.description ?? null,
+        unit: it.unit ?? "un",
+        quantity: it.quantity ?? 0,
+        waste_percent: it.waste_percent ?? 0,
+        confidence_score: it.confidence_score ?? 70,
+        source_documents: Array.isArray(it.source_documents)
+          ? (it.source_documents as string[]).join(", ")
           : null,
       }));
 
-      const { error: insertError } = await supabase.from("findings").insert(rows);
+      const { error: insertError } = await supabase.from("quantity_items").insert(rows);
 
       if (insertError) {
         return NextResponse.json(
-          { error: "No se pudieron guardar los hallazgos", detail: insertError.message },
+          { error: "No se pudo guardar el cómputo", detail: insertError.message },
           { status: 500 }
         );
       }
     }
 
-    return NextResponse.json({ success: true, count: findings.length, documentsAnalyzed: docs.length });
+    return NextResponse.json({ success: true, count: items.length, documentsAnalyzed: docs.length });
   } catch (err) {
     return NextResponse.json(
-      { error: "Error inesperado al analizar", detail: String(err) },
+      { error: "Error inesperado al calcular el cómputo", detail: String(err) },
       { status: 500 }
     );
   }
